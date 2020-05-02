@@ -94,6 +94,7 @@ final class PostProcessorRegistrationDelegate {
 			//根据类型从bdmap当中找到名字
 			//为什么只有1个，这个哪里来的？有什么用
 			String[] postProcessorNames =
+					//合并BD（RootBD和ChildBD）把父类合并到子类中
 					beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
 			for (String ppName : postProcessorNames) {
 				//实现了PriorityOrdered接口，PriorityOrdered策略

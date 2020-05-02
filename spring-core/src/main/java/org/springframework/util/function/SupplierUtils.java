@@ -27,7 +27,7 @@ import org.springframework.lang.Nullable;
  * @since 5.1
  * @see SingletonSupplier
  */
-public abstract class SupplierUtils {
+public class SupplierUtils {
 
 	/**
 	 * Resolve the given {@code Supplier}, getting its result or immediately

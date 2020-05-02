@@ -1218,6 +1218,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 	 */
 	protected RootBeanDefinition getMergedLocalBeanDefinition(String beanName) throws BeansException {
 		// Quick check on the concurrent map first, with minimal locking.
+		//从缓存获取合并bd
 		RootBeanDefinition mbd = this.mergedBeanDefinitions.get(beanName);
 		if (mbd != null) {
 			return mbd;
@@ -1260,10 +1261,11 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 			if (containingBd == null) {
 				mbd = this.mergedBeanDefinitions.get(beanName);
 			}
-
+			//下面是合并bd逻辑
 			if (mbd == null) {
+				//没有父类直接克隆
 				if (bd.getParentName() == null) {
-					// Use copy of given root bean definition.
+					// Use copy of given root bean definition
 					if (bd instanceof RootBeanDefinition) {
 						mbd = ((RootBeanDefinition) bd).cloneBeanDefinition();
 					}
@@ -1296,7 +1298,9 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 								"Could not resolve parent bean definition '" + bd.getParentName() + "'", ex);
 					}
 					// Deep copy with overridden values.
+					//以父类为基准深拷贝
 					mbd = new RootBeanDefinition(pbd);
+					//把子类的属性覆盖父类属性，完成合并
 					mbd.overrideFrom(bd);
 				}
 
@@ -1316,6 +1320,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 				// Cache the merged bean definition for the time being
 				// (it might still get re-merged later on in order to pick up metadata changes)
 				if (containingBd == null && isCacheBeanMetadata()) {
+					//缓存合并后bd
 					this.mergedBeanDefinitions.put(beanName, mbd);
 				}
 			}
@@ -1580,6 +1585,8 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 				if (!this.alreadyCreated.contains(beanName)) {
 					// Let the bean definition get re-merged now that we're actually creating
 					// the bean... just in case some of its metadata changed in the meantime.
+					//在创建前重新合并bd，以防止bd的元数据在BeanFactoryPostProcessor
+					//里面改变了bd属性
 					clearMergedBeanDefinition(beanName);
 					this.alreadyCreated.add(beanName);
 				}

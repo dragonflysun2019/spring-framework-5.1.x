@@ -19,6 +19,10 @@ public class A {
 		System.out.println("一个参数构造方法b");
 	}
 
+	public A(B b,AppConfig a){
+		System.out.println("两个参数构造方法b");
+	}
+
 	public void testAop(){
 		System.out.println("This is class A!");
 	}
