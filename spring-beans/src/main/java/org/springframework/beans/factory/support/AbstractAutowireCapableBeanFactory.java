@@ -505,6 +505,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		try {
 			// Give BeanPostProcessors a chance to return a proxy instead of the target bean instance.
 			//第一次调用后置处理器----有AOP代理相关对象进入这里才有用
+			//判断Bean是否要代理
 			Object bean = resolveBeforeInstantiation(beanName, mbdToUse);
 			if (bean != null) {
 				return bean;
@@ -557,7 +558,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 			instanceWrapper = this.factoryBeanInstanceCache.remove(beanName);
 		}
 		if (instanceWrapper == null) {
-			//实例化对象，里面第二次调用后置处理器
+			//实例化对象，里面第二次调用后置处理器---推断构造方法
 			instanceWrapper = createBeanInstance(beanName, mbd, args);
 		}
 		//得到实例化出来的对象
@@ -571,10 +572,10 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		synchronized (mbd.postProcessingLock) {
 			if (!mbd.postProcessed) {
 				try {
-					//第三次调用后置处理器来合并
+					//第三次调用后置处理器来合并父子bd
 					//调用后置处理器来应用合并之后的bd
 					//把bd里面的信息拿出来---需要的属性
-					//缓存了需要注入元素的信息
+					//缓存了需要注入元素的信息(加了@Autowired、@Value和@Resource注解)
 					//为下面populateBean准备
 					applyMergedBeanDefinitionPostProcessors(mbd, beanType, beanName);
 				}
@@ -596,7 +597,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 				logger.trace("Eagerly caching bean '" + beanName +
 						"' to allow for resolving potential circular references");
 			}
-			//第四次调用后置处理器，判断是否需要AOP
+			//第四次调用后置处理器，为循环依赖服务，提前暴露工厂（判断是否AOP代理）
 			//添加单例工厂
 			addSingletonFactory(beanName, () -> getEarlyBeanReference(beanName, mbd, bean));
 		}
@@ -605,7 +606,8 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		Object exposedObject = bean;
 		try {
 			//填充属性，也就是我们常常说的自动注入
-			//里面完成第五次和第六次后置处理器调用（如果有循环依赖，可能这里就调用后置处理器生成AOP代理对象）
+			//里面完成第五次后置处理其调用----属性是否注入
+			// 第六次后置处理器调用---属性注入，如果有循环依赖，可能这里就调用后置处理器生成AOP代理对象）
 			populateBean(beanName, mbd, instanceWrapper);
 			//初始化Spring
 			//里面完成第七次和第八次后置处理器调用（包括AOP生成代理对象）
@@ -1405,7 +1407,9 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 			for (BeanPostProcessor bp : getBeanPostProcessors()) {
 				if (bp instanceof InstantiationAwareBeanPostProcessor) {
 					InstantiationAwareBeanPostProcessor ibp = (InstantiationAwareBeanPostProcessor) bp;
-					//执行后置处理器的postProcessAfterInstantiation方法
+					//第五次执行后置处理器的postProcessAfterInstantiation方法，如果该方法返回false
+					//就直接return，不进行下面属性填充，Spring内置类都是返回true
+					//留了个接口给程序员自己扩展
 					if (!ibp.postProcessAfterInstantiation(bw.getWrappedInstance(), beanName)) {
 						return;
 					}
@@ -1413,6 +1417,8 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 			}
 		}
 
+		//查看程序员有没有通过api(genericBeanDefinition.getPropertyValues().addPropertyValue())
+		//提供属性值
 		PropertyValues pvs = (mbd.hasPropertyValues() ? mbd.getPropertyValues() : null);
 
 		int resolvedAutowireMode = mbd.getResolvedAutowireMode();
@@ -1424,6 +1430,8 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 			}
 			// Add property values based on autowire by type if applicable.
 			if (resolvedAutowireMode == AUTOWIRE_BY_TYPE) {
+				//找出bw当中所有需要注入的方法
+				//方法包含了一个参数----就会把这个参数的值找出来
 				autowireByType(beanName, mbd, bw, newPvs);
 			}
 			pvs = newPvs;
@@ -1437,6 +1445,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 			if (pvs == null) {
 				pvs = mbd.getPropertyValues();
 			}
+			//第六次调用后置处理器完成注解的属性填充
 			for (BeanPostProcessor bp : getBeanPostProcessors()) {
 				if (bp instanceof InstantiationAwareBeanPostProcessor) {
 					InstantiationAwareBeanPostProcessor ibp = (InstantiationAwareBeanPostProcessor) bp;
@@ -1463,6 +1472,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		}
 
 		if (pvs != null) {
+			//把程序员提供的，Spring找出的属性值应用上
 			applyPropertyValues(beanName, mbd, bw, pvs);
 		}
 	}
@@ -1519,9 +1529,11 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		}
 
 		Set<String> autowiredBeanNames = new LinkedHashSet<>(4);
+		//调用JDK内省机制，获取set方法描述的属性值
 		String[] propertyNames = unsatisfiedNonSimpleProperties(mbd, bw);
 		for (String propertyName : propertyNames) {
 			try {
+				//获取属性名称（set方法描述的）
 				PropertyDescriptor pd = bw.getPropertyDescriptor(propertyName);
 				// Don't try autowiring by type for type Object: never makes sense,
 				// even if it technically is a unsatisfied, non-simple property.
@@ -1563,8 +1575,10 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 	protected String[] unsatisfiedNonSimpleProperties(AbstractBeanDefinition mbd, BeanWrapper bw) {
 		Set<String> result = new TreeSet<>();
 		PropertyValues pvs = mbd.getPropertyValues();
+		//通过类的get和set方法获得读取和写入的属性名称
 		PropertyDescriptor[] pds = bw.getPropertyDescriptors();
 		for (PropertyDescriptor pd : pds) {
+			//获取set方法的描述
 			if (pd.getWriteMethod() != null && !isExcludedFromDependencyCheck(pd) && !pvs.contains(pd.getName()) &&
 					!BeanUtils.isSimpleProperty(pd.getPropertyType())) {
 				result.add(pd.getName());
@@ -1801,14 +1815,17 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 
 		Object wrappedBean = bean;
 		if (mbd == null || !mbd.isSynthetic()) {
-			//执行生命周期初始化回调方法1
-			//执行Spring当中内置的后置处理器------@PostConstruct
+			//第七次执行Spring当中内置的后置处理器
+			//1.CommonAnnotationBeanPostProcessor后置处理器执行@PostConstruct方法等生命周期初始化方法
+			//2.ApplicationContextAwareProcessor后置处理器执行各种Aware实现类
+			//
 			wrappedBean = applyBeanPostProcessorsBeforeInitialization(wrappedBean, beanName);
 		}
 
 		try {
-			//执行生命周期初始化回调方法2
-			//执行InitializingBean 初始化 或者 xml init-method="xxx"
+			//执行生命周期初始化回调方法
+			//执行InitializingBean接口实现类afterPropertiesSet方法 初始化
+			//或者 xml init-method="xxx"
 			invokeInitMethods(beanName, wrappedBean, mbd);
 		}
 		catch (Throwable ex) {
@@ -1817,7 +1834,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 					beanName, "Invocation of init method failed", ex);
 		}
 		if (mbd == null || !mbd.isSynthetic()) {
-			//在这里通过后置处理器实现AOP
+			//第八次执行后置处理器在这里通过后置处理器实现AOP代理
 			wrappedBean = applyBeanPostProcessorsAfterInitialization(wrappedBean, beanName);
 		}
 

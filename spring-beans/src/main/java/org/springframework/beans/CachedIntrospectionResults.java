@@ -162,8 +162,10 @@ public final class CachedIntrospectionResults {
 	 * @param beanClass the bean class to analyze
 	 * @return the corresponding CachedIntrospectionResults
 	 * @throws BeansException in case of introspection failure
+	 * JDK内省机制
 	 */
 	static CachedIntrospectionResults forClass(Class<?> beanClass) throws BeansException {
+		//首先冲strong和soft缓存中取
 		CachedIntrospectionResults results = strongClassCache.get(beanClass);
 		if (results != null) {
 			return results;
@@ -172,7 +174,7 @@ public final class CachedIntrospectionResults {
 		if (results != null) {
 			return results;
 		}
-
+		//没有取到，就new一个缓存JDK内省对象，拿到类中的get和set方法
 		results = new CachedIntrospectionResults(beanClass);
 		ConcurrentMap<Class<?>, CachedIntrospectionResults> classCacheToUse;
 
@@ -269,6 +271,7 @@ public final class CachedIntrospectionResults {
 			if (logger.isTraceEnabled()) {
 				logger.trace("Getting BeanInfo for class [" + beanClass.getName() + "]");
 			}
+			//调用JDK内省机制，取到的get和set方法
 			this.beanInfo = getBeanInfo(beanClass);
 
 			if (logger.isTraceEnabled()) {
@@ -277,6 +280,7 @@ public final class CachedIntrospectionResults {
 			this.propertyDescriptorCache = new LinkedHashMap<>();
 
 			// This call is slow so we do it once.
+			//获取已经取到的get和set方法
 			PropertyDescriptor[] pds = this.beanInfo.getPropertyDescriptors();
 			for (PropertyDescriptor pd : pds) {
 				if (Class.class == beanClass &&

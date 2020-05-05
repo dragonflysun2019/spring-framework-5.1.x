@@ -245,6 +245,7 @@ public class BeanWrapperImpl extends AbstractNestablePropertyAccessor implements
 
 	@Override
 	public PropertyDescriptor[] getPropertyDescriptors() {
+		//JDK内省机制，获取类中的get和set方法
 		return getCachedIntrospectionResults().getPropertyDescriptors();
 	}
 
